@@ -51,12 +51,12 @@
                 <label v-if="selectionMode" class="select-checkbox">
                   <input type="checkbox" :value="img" v-model="selectedImages" />
                 </label>
-                <img :src="imageUrl(img)" @click="openImage(img)" :alt="img" />
+                <LazyImage :src="imageUrl(img)" :alt="img" @click="openImage(img)" />
                 <div class="meta">
                   <div class="name">{{ img }}</div>
                   <div class="actions">
-                    <a v-if="!selectionMode" :href="downloadUrl(img)" target="_blank">下载</a>
-                    <button v-if="!selectionMode" @click="openImage(img)">预览</button>
+                    <a v-if="!selectionMode" :href="downloadUrl(img)" target="_blank" rel="noopener" class="btn-outline action-btn">下载</a>
+                    <button v-if="!selectionMode" class="btn-primary action-btn" @click="openImage(img)">预览</button>
                   </div>
                 </div>
               </div>
@@ -71,6 +71,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import ImageViewer from './ImageViewer.vue'
+import LazyImage from './LazyImage.vue'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
@@ -198,11 +199,25 @@ async function toggleNode(node, idx){
     collapseChildren(node, idx)
     node.expanded = false
     node.loaded = false
+    // 如果折叠的节点包含当前选中的文件夹（包括子目录），则清除选中并恢复占位提示视图
+    if(selectedFolder.value && (selectedFolder.value === node.fullPath || selectedFolder.value.startsWith(node.fullPath + '/'))){
+      console.log('[gallery] collapsing parent of selected node, clearing selection and preview:', node.fullPath)
+      selectedFolder.value = null
+      images.value = []
+      currentPath.value = ''
+      // 使用空字符串确保 v-if 判定为 falsy，避免某些情况下仍然显示预览
+      viewerImage.value = ''
+    }
     return
   }
   // expand
   if(node.loaded){
     node.expanded = true
+    // 通过箭头展开也要把该文件夹设为选中并加载内容
+    console.log('[gallery] expanding folder via arrow:', node.fullPath)
+    selectedFolder.value = node.fullPath
+    selectionMode.value = false
+    await load(node.fullPath)
     return
   }
   const data = await fetchFolderData(node.fullPath)
@@ -219,6 +234,11 @@ async function toggleNode(node, idx){
   treeNodes.value.splice(idx+1, 0, ...items)
   node.expanded = true
   node.loaded = true
+  // 将通过展开操作选中该文件夹并加载其内容
+  console.log('[gallery] expanded folder and loaded:', node.fullPath)
+  selectedFolder.value = node.fullPath
+  selectionMode.value = false
+  await load(node.fullPath)
 }
 
 function collapseChildren(node, idx){
@@ -244,8 +264,19 @@ onMounted(()=> buildRootTree())
 </script>
 
 <style scoped>
-.gallery-layout{ display:flex; height:calc(100vh - 40px); border-radius:10px; overflow:hidden; box-shadow: 0 6px 18px rgba(2,6,23,0.6) }
-.sidebar{ width:320px; min-width:220px; background: linear-gradient(180deg,#0b1220 0%, #0f1724 100%); color:#cdefff; padding:20px; box-sizing:border-box; height:100% }
+.gallery-layout{
+  display:flex;
+  /* 固定为基于视口的响应式背板：宽度自适应浏览器，居中，有边距，且高度基于视口而非内容 */
+  width: calc(100% - 32px);
+  max-width: none;
+  margin: 16px auto;
+  height: calc(100vh - 40px);
+  min-height: 60vh;
+  border-radius:10px;
+  overflow:hidden;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+}
+.sidebar{ width:340px; min-width:240px; background: linear-gradient(180deg,#10242e 0%, #16383f 100%); color:#d7fbff; padding:20px; box-sizing:border-box; height:100% }
 .brand{ font-weight:700; font-size:1.2rem; margin-bottom:8px }
 .sidebar-controls{ display:flex; gap:8px; margin-bottom:12px }
 .sidebar-controls button{ background:transparent; border:1px solid rgba(155,231,255,0.08); color:#9be7ff; padding:6px 8px; border-radius:6px }
@@ -259,24 +290,81 @@ onMounted(()=> buildRootTree())
 .fi-left{ width:30px; text-align:center }
 .fi-name{ flex:1; text-align:left }
 
-.main{ flex:1; background:linear-gradient(180deg,#0b1220 0%, #071018 100%); padding:28px; box-sizing:border-box; height:100% }
+.main{ flex:1; background:linear-gradient(180deg,#123a42 0%, #0c2830 100%); padding:28px; box-sizing:border-box; height:100% }
 .placeholder{ display:flex; align-items:center; justify-content:center; height:100% }
 .placeholder-box{ text-align:center; color:#9be7ff; max-width:720px }
 .placeholder .emoji{ font-size:3rem; margin-bottom:8px }
 .content{ }
 .content{ height:calc(100% - 64px); overflow:auto }
 .images{ max-height:100%; overflow:auto }
-.image-card{ background:rgba(255,255,255,0.02); padding:8px; border-radius:8px; position:relative }
+.image-card{
+  background: linear-gradient(180deg, rgba(28,38,44,0.92), rgba(18,28,34,0.88));
+  border: 1px solid rgba(255,255,255,0.06);
+  padding:10px;
+  border-radius:12px;
+  position:relative;
+  overflow:hidden;
+}
 .select-checkbox{ position:absolute; left:8px; top:8px; background:rgba(0,0,0,0.35); padding:4px; border-radius:4px }
-.image-card img{ width:100%; height:160px; object-fit:cover; border-radius:6px; cursor:pointer }
+.image-card img{ width:100%; height:160px; object-fit:cover; border-radius:6px; cursor:pointer; display:block }
 .content-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px }
 .crumbs .crumb.clickable{ cursor:pointer; color:#9be7ff }
 .images.grid{ display:grid; grid-template-columns: repeat(auto-fill,minmax(200px,1fr)); gap:16px }
 .images.list{ display:block }
 .image-card{ background:rgba(255,255,255,0.02); padding:8px; border-radius:8px }
 .image-card img{ width:100%; height:180px; object-fit:cover; border-radius:6px; cursor:pointer }
-.meta{ display:flex; justify-content:space-between; align-items:center; margin-top:6px; color:#cfefff }
-.actions a, .actions button{ margin-left:8px }
+
+/* meta area separated from main dark background */
+.meta{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-top:10px;
+  padding:10px 12px;
+  /* 更浅的 meta 背景以增强可读性 */
+  background: rgba(255,255,255,0.02);
+  border-radius:8px;
+  border: 1px solid rgba(255,255,255,0.04);
+  color: #e6fff9;
+}
+.name{
+  font-weight:600;
+  color:#e6fff9;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  max-width:66%;
+}
+.actions{ display:flex; gap:8px; align-items:center }
+.actions a, .actions button{ margin:0 }
+
+/* button visuals inside cards */
+.action-btn{
+  padding:6px 10px;
+  font-size:0.92rem;
+  border-radius:6px;
+  line-height:1;
+}
+.btn-outline.action-btn{
+  border:1px solid rgba(110,210,220,0.26);
+  color:#66e0e8;
+  background:transparent;
+}
+.btn-primary.action-btn{
+  background: linear-gradient(90deg,#11807f,#0c6b68);
+  color:#e6fff9;
+  border:none;
+  box-shadow: 0 6px 14px rgba(10,60,60,0.28);
+}
+
+/* smaller, consistent action buttons inside each image card */
+.action-btn{
+  padding:6px 10px;
+  font-size:0.92rem;
+  border-radius:6px;
+  line-height:1;
+}
+.actions a{ text-decoration:none; display:inline-block }
 
 .btn-primary{
   background: linear-gradient(90deg,#0f3a45,#08323a);
@@ -300,7 +388,7 @@ onMounted(()=> buildRootTree())
 
 /* responsive */
 @media (max-width:900px){
-  .gallery-layout{ flex-direction:column; height:auto }
+  .gallery-layout{ flex-direction:column; /* 保持基于视口的高度，避免随内容塌缩 */ }
   .sidebar{ width:100%; display:flex; gap:12px; overflow:auto }
   .main{ height:auto }
 }

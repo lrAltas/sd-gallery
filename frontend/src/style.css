@@ -4,8 +4,9 @@
   font-weight: 400;
 
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color: rgba(230, 255, 250, 0.95);
+  /* 整体背景稍微偏亮一点的深色调 */
+  background-color: #0f2430;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -24,10 +25,11 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
+  display: block;
   min-width: 320px;
   min-height: 100vh;
+  /* 让页面背景比之前稍亮，减少压抑感 */
+  background-color: #112a34;
 }
 
 h1 {
@@ -59,10 +61,11 @@ button:focus-visible {
 }
 
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
 }
 
 @media (prefers-color-scheme: light) {
